@@ -544,20 +544,28 @@ function renderApp() {
       const directInput = el("input");
       directInput.type = "number";
       directInput.min = "0";
-      directInput.placeholder = "Set stock";
+      directInput.placeholder = "Update stock";
       directInput.value = Number(item.currentStock || 0);
-      const setBtn = el("button", "action", "Set");
-      setBtn.addEventListener("click", async () => {
+
+      const saveDirectStock = async () => {
         await updateDoc(doc(db, `restaurants/${restaurant.id}/items`, item.id), {
           currentStock: Number(directInput.value || 0),
           updatedAt: serverTimestamp()
         });
+      };
+
+      directInput.addEventListener("keydown", async (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        await saveDirectStock();
       });
-      actions.append(directInput, setBtn);
-      actions.append(makeAdjustButton(restaurant.id, item.id, "+1", 1));
-      actions.append(makeAdjustButton(restaurant.id, item.id, "+5", 5));
-      actions.append(makeAdjustButton(restaurant.id, item.id, "-1", -1));
-      actions.append(makeAdjustButton(restaurant.id, item.id, "-5", -5));
+
+      directInput.addEventListener("blur", async () => {
+        if (Number(directInput.value || 0) === Number(item.currentStock || 0)) return;
+        await saveDirectStock();
+      });
+
+      actions.append(directInput);
 
       const statusRow = el("div", "status-row");
       statusRow.append(el("span", `dot ${status}`));
@@ -582,17 +590,6 @@ function renderApp() {
   page.append(footer);
 
   return page;
-}
-
-function makeAdjustButton(restaurantId, id, label, delta) {
-  const btn = el("button", "action", label);
-  btn.addEventListener("click", async () => {
-    await updateDoc(doc(db, `restaurants/${restaurantId}/items`, id), {
-      currentStock: Number((state.items.find((i) => i.id === id) || {}).currentStock || 0) + delta,
-      updatedAt: serverTimestamp()
-    });
-  });
-  return btn;
 }
 
 function render() {
