@@ -178,6 +178,7 @@ function renderHome() {
   const headerText = el("div");
   headerText.append(el("h1", "", "Your Restaurants"));
   headerText.append(el("p", "subtext", "Tap your restaurant to continue."));
+  headerText.append(el("p", "subtext", "BUILD 2026-03-18"));
   header.append(headerText);
   page.append(header);
 
