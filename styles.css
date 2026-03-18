@@ -86,6 +86,20 @@ input {
   font-size: 16px;
 }
 
+select,
+textarea {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--blue-200);
+  font-size: 16px;
+  font-family: inherit;
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
 button {
   border: none;
   border-radius: 12px;
@@ -163,7 +177,7 @@ button:disabled {
 
 .actions {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 1fr;
   gap: 10px;
   margin-top: 12px;
 }
@@ -207,7 +221,9 @@ button:active {
 }
 
 input:focus,
-button:focus {
+button:focus,
+select:focus,
+textarea:focus {
   outline: 3px solid rgba(249, 115, 22, 0.25);
   outline-offset: 2px;
 }
@@ -270,12 +286,33 @@ button:focus {
   margin-top: auto;
 }
 
+.controls-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.controls-row > * {
+  flex: 1 1 220px;
+}
+
+.select {
+  background: white;
+}
+
+.textarea {
+  width: 100%;
+}
+
+.undo-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 @media (min-width: 768px) {
   .page {
     padding: 32px 80px;
-  }
-
-  .actions {
-    grid-template-columns: repeat(6, 1fr);
   }
 }
