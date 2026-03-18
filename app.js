@@ -63,6 +63,7 @@ let state = {
   editingId: null,
   editingItem: null,
   items: [],
+  itemSearchTerm: "",
   loading: true
 };
 
@@ -100,20 +101,12 @@ function getStatus(current, threshold) {
   return STATUS.GOOD;
 }
 
-function todayKey() {
-  return DAYS[new Date().getDay()];
-}
-
-function normalizeThresholds(item) {
+function getItemMinStock(item) {
+  if (typeof item.minStock === "number") return Number(item.minStock || 0);
   if (item.thresholds && typeof item.thresholds === "object") {
-    return item.thresholds;
+    return Number(Object.values(item.thresholds)[0] || 0);
   }
-  const fallback = Number(item.dailyThreshold || 0);
-  const thresholds = {};
-  DAYS.forEach((day) => {
-    thresholds[day] = fallback;
-  });
-  return thresholds;
+  return Number(item.dailyThreshold || 0);
 }
 
 function el(tag, className, text) {
@@ -443,29 +436,16 @@ function renderApp() {
   stockInput.placeholder = "Current stock";
   stockInput.min = "0";
 
-  const thresholdsTitle = el("p", "subtext", "Daily thresholds");
-  const thresholdsGrid = el("div", "threshold-grid");
-  const thresholdInputs = {};
-  DAYS.forEach((day) => {
-    const wrap = el("div", "threshold-item");
-    const label = el("label", "", DAY_LABELS[day]);
-    const input = el("input");
-    input.type = "number";
-    input.min = "0";
-    input.placeholder = "0";
-    thresholdInputs[day] = input;
-    wrap.append(label, input);
-    thresholdsGrid.append(wrap);
-  });
+  const minStockInput = el("input");
+  minStockInput.type = "number";
+  minStockInput.placeholder = "Minimum stock";
+  minStockInput.min = "0";
 
   if (state.editingId && state.editingItem) {
     nameInput.value = state.editingItem.name || "";
     stockInput.value = state.editingItem.currentStock ?? 0;
     unitInput.value = state.editingItem.unit || "";
-    const thresholds = normalizeThresholds(state.editingItem);
-    DAYS.forEach((day) => {
-      thresholdInputs[day].value = thresholds[day] ?? 0;
-    });
+    minStockInput.value = getItemMinStock(state.editingItem);
   }
 
   const submit = el("button", "primary", state.editingId ? "Save Changes" : "Add Item");
@@ -476,15 +456,10 @@ function renderApp() {
     if (!nameInput.value.trim()) return;
     submit.disabled = true;
 
-    const thresholds = {};
-    DAYS.forEach((day) => {
-      thresholds[day] = Number(thresholdInputs[day].value || 0);
-    });
-
     const payload = {
       name: nameInput.value.trim(),
       currentStock: Number(stockInput.value || 0),
-      thresholds,
+      minStock: Number(minStockInput.value || 0),
       unit: unitInput.value.trim(),
       updatedAt: serverTimestamp()
     };
@@ -510,7 +485,7 @@ function renderApp() {
     unitList.append(option);
   });
 
-  form.append(nameInput, unitInput, stockInput, thresholdsTitle, thresholdsGrid, submit, unitList);
+  form.append(nameInput, unitInput, stockInput, minStockInput, submit, unitList);
   formCard.append(formTitle, form);
   page.append(formCard);
 
@@ -518,23 +493,34 @@ function renderApp() {
   const listHeader = el("div", "section-header");
   listHeader.append(el("h2", "", "Items"));
   listCard.append(listHeader);
+  const itemSearch = el("input");
+  itemSearch.placeholder = "Search item";
+  itemSearch.value = state.itemSearchTerm || "";
+  itemSearch.addEventListener("input", () => {
+    state.itemSearchTerm = itemSearch.value;
+    render();
+  });
+  listCard.append(itemSearch);
+  const visibleItems = state.items.filter((item) =>
+    String(item.name || "").toLowerCase().includes(String(state.itemSearchTerm || "").trim().toLowerCase())
+  );
 
   if (state.items.length === 0) {
     listCard.append(el("p", "subtext", "No items yet. Add your first one above."));
+  } else if (visibleItems.length === 0) {
+    listCard.append(el("p", "subtext", "No matching items."));
   } else {
     const list = el("div", "item-list");
-    state.items.forEach((item) => {
-      const thresholds = normalizeThresholds(item);
-      const today = todayKey();
-      const todayThreshold = Number(thresholds[today] || 0);
-      const status = getStatus(item.currentStock || 0, todayThreshold);
+    visibleItems.forEach((item) => {
+      const minStock = getItemMinStock(item);
+      const status = getStatus(item.currentStock || 0, minStock);
       const card = el("div", `item ${status}`);
 
       const main = el("div", "item-main");
       const info = el("div");
       info.append(el("h3", "", item.name || "Item"));
       const unitLabel = item.unit ? ` ${item.unit}` : "";
-      info.append(el("p", "subtext", `Stock: ${item.currentStock || 0}${unitLabel} | Today: ${todayThreshold}${unitLabel}`));
+      info.append(el("p", "subtext", `Stock: ${item.currentStock || 0}${unitLabel} | Min: ${minStock}${unitLabel}`));
 
       const edit = el("button", "outline", "Edit");
       edit.addEventListener("click", () => {
@@ -555,6 +541,19 @@ function renderApp() {
       main.append(info, actionWrap);
 
       const actions = el("div", "actions");
+      const directInput = el("input");
+      directInput.type = "number";
+      directInput.min = "0";
+      directInput.placeholder = "Set stock";
+      directInput.value = Number(item.currentStock || 0);
+      const setBtn = el("button", "action", "Set");
+      setBtn.addEventListener("click", async () => {
+        await updateDoc(doc(db, `restaurants/${restaurant.id}/items`, item.id), {
+          currentStock: Number(directInput.value || 0),
+          updatedAt: serverTimestamp()
+        });
+      });
+      actions.append(directInput, setBtn);
       actions.append(makeAdjustButton(restaurant.id, item.id, "+1", 1));
       actions.append(makeAdjustButton(restaurant.id, item.id, "+5", 5));
       actions.append(makeAdjustButton(restaurant.id, item.id, "-1", -1));
