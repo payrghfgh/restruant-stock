@@ -11,6 +11,7 @@ import {
   collection,
   addDoc,
   doc,
+  getDoc,
   updateDoc,
   deleteDoc,
   onSnapshot,
@@ -53,14 +54,15 @@ const DAY_LABELS = {
 };
 
 let state = {
+  userName: localStorage.getItem("userName") || "",
   restaurants: [],
+  customRestaurant: null,
   currentId: null,
-  passUnlocked: false,
-  passError: "",
-  showPassSetup: false,
   editingId: null,
   editingItem: null,
   items: [],
+  searchQuery: "",
+  showLowStockOnly: false,
   loading: true
 };
 
@@ -83,12 +85,6 @@ function saveApp() {
     lastRestaurantId: state.currentId
   };
   localStorage.setItem(APP_KEY, JSON.stringify(data));
-}
-
-async function hashPass(value) {
-  const data = new TextEncoder().encode(value);
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return btoa(String.fromCharCode(...new Uint8Array(hash)));
 }
 
 function getStatus(current, threshold) {
@@ -126,22 +122,22 @@ function clear(node) {
 }
 
 function getCurrentRestaurant() {
-  return state.restaurants.find((r) => r.id === state.currentId) || null;
+  return state.restaurants.find((r) => r.id === state.currentId) || state.customRestaurant || null;
 }
 
 function setCurrentRestaurant(id) {
   state.currentId = id;
-  state.passUnlocked = false;
-  state.passError = "";
-  state.showPassSetup = false;
   state.editingId = null;
   state.editingItem = null;
+  state.searchQuery = "";
+  state.showLowStockOnly = false;
   saveApp();
   subscribeItems();
 }
 
 function subscribeRestaurants() {
   if (unsubRestaurants) unsubRestaurants();
+  // For the dashboard list: order alphabetically
   const q = query(collection(db, "restaurants"), orderBy("name"));
   unsubRestaurants = onSnapshot(q, (snap) => {
     state.restaurants = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -162,20 +158,58 @@ function subscribeItems() {
     return;
   }
   const itemsRef = collection(db, `restaurants/${restaurant.id}/items`);
-  const q = query(itemsRef, orderBy("name"));
+  const q = query(itemsRef, orderBy("name")); // items initially ordered by name
   unsubItems = onSnapshot(q, (snap) => {
     state.items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     render();
   });
 }
 
+function renderNameSetup() {
+  const page = el("div", "page auth-page");
+  const card = el("div", "card");
+  card.append(el("h1", "", "Welcome"));
+  card.append(el("p", "subtext", "Please enter your name to continue."));
+  
+  const form = el("form", "stack");
+  const nameInput = el("input");
+  nameInput.placeholder = "Your Name (e.g. Jeff)";
+  nameInput.required = true;
+  
+  const submit = el("button", "primary", "Continue");
+  submit.type = "submit";
+  
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = nameInput.value.trim();
+    if (name) {
+      state.userName = name;
+      localStorage.setItem("userName", name);
+      render();
+    }
+  });
+  
+  form.append(nameInput, submit);
+  card.append(form);
+  page.append(card);
+  return page;
+}
+
 function renderHome() {
   const page = el("div", "page");
   const header = el("header", "header");
   const headerText = el("div");
-  headerText.append(el("h1", "", "Your Restaurants"));
-  headerText.append(el("p", "subtext", "Tap your restaurant to continue."));
-  header.append(headerText);
+  headerText.append(el("h1", "", `Hello, ${state.userName}`));
+  headerText.append(el("p", "subtext", "Select a restaurant or join one."));
+  
+  const changeNameBtn = el("button", "outline", "Change Name");
+  changeNameBtn.addEventListener("click", () => {
+    state.userName = "";
+    localStorage.removeItem("userName");
+    render();
+  });
+  
+  header.append(headerText, changeNameBtn);
   page.append(header);
 
   const listCard = el("section", "card");
@@ -211,134 +245,61 @@ function renderHome() {
   const nameInput = el("input");
   nameInput.placeholder = "Restaurant name";
   nameInput.required = true;
-  const passInput = el("input");
-  passInput.type = "password";
-  passInput.placeholder = "Set password";
-  passInput.required = true;
 
   const submit = el("button", "primary", "Create Restaurant");
   submit.type = "submit";
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!nameInput.value.trim() || !passInput.value) return;
-    const hashed = await hashPass(passInput.value);
+    if (!nameInput.value.trim()) return;
     const restaurantRef = await addDoc(collection(db, "restaurants"), {
       name: nameInput.value.trim(),
-      passHash: hashed,
       createdAt: serverTimestamp()
     });
     setCurrentRestaurant(restaurantRef.id);
     render();
   });
 
-  form.append(nameInput, passInput, submit);
+  form.append(nameInput, submit);
   setup.append(form);
   page.append(setup);
 
-  return page;
-}
+  const joinCard = el("section", "card");
+  joinCard.append(el("h2", "", "Join Existing Restaurant"));
+  const joinForm = el("form", "stack");
+  const codeInput = el("input");
+  codeInput.placeholder = "Enter Restaurant Code";
+  codeInput.required = true;
+  const joinSubmit = el("button", "primary", "Join by Code");
+  joinSubmit.type = "submit";
 
-function renderPassGate() {
-  const page = el("div", "page auth-page");
-  const card = el("div", "card");
-  const restaurant = getCurrentRestaurant();
-  const title = el("h1", "", restaurant ? restaurant.name : "Enter Password");
-  const sub = el("p", "subtext", "Staff access only.");
-
-  const form = el("form", "stack");
-  const pass = el("input");
-  pass.type = "password";
-  pass.placeholder = "Password";
-  pass.required = true;
-
-  const error = el("div", "error", state.passError || "");
-  if (!state.passError) error.style.display = "none";
-
-  const submit = el("button", "primary", "Unlock");
-  submit.type = "submit";
-
-  const back = el("button", "outline", "Back");
-  back.type = "button";
-  back.addEventListener("click", () => {
-    state.currentId = null;
-    state.passUnlocked = false;
-    state.passError = "";
-    saveApp();
-    render();
-  });
-
-  form.addEventListener("submit", async (event) => {
+  joinForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    state.passError = "";
-    render();
-    const hashed = await hashPass(pass.value);
-    if (restaurant && hashed === restaurant.passHash) {
-      state.passUnlocked = true;
-      render();
-      return;
+    const code = codeInput.value.trim();
+    if (!code) return;
+    try {
+      joinSubmit.disabled = true;
+      joinSubmit.textContent = "Checking...";
+      const docSnap = await getDoc(doc(db, "restaurants", code));
+      if (docSnap.exists()) {
+        state.customRestaurant = { id: docSnap.id, ...docSnap.data() };
+        setCurrentRestaurant(docSnap.id);
+        render();
+      } else {
+        alert("Restaurant not found. Please check the code.");
+      }
+    } catch (e) {
+      alert("Error: " + e.message);
+    } finally {
+      joinSubmit.disabled = false;
+      joinSubmit.textContent = "Join by Code";
     }
-    state.passError = "Wrong password.";
-    render();
   });
 
-  form.append(pass, error, submit, back);
-  card.append(title, sub, form);
-  page.append(card);
-  return page;
-}
+  joinForm.append(codeInput, joinSubmit);
+  joinCard.append(joinForm);
+  page.append(joinCard);
 
-function renderPassSetup() {
-  const page = el("div", "page auth-page");
-  const card = el("div", "card");
-  const title = el("h1", "", "Change Password");
-  const sub = el("p", "subtext", "Set a new password for this restaurant.");
-
-  const form = el("form", "stack");
-  const pass1 = el("input");
-  pass1.type = "password";
-  pass1.placeholder = "New password";
-  pass1.required = true;
-
-  const pass2 = el("input");
-  pass2.type = "password";
-  pass2.placeholder = "Confirm password";
-  pass2.required = true;
-
-  const error = el("div", "error", state.passError || "");
-  if (!state.passError) error.style.display = "none";
-
-  const submit = el("button", "primary", "Save Password");
-  submit.type = "submit";
-
-  const cancel = el("button", "outline", "Cancel");
-  cancel.type = "button";
-  cancel.addEventListener("click", () => {
-    state.showPassSetup = false;
-    state.passError = "";
-    render();
-  });
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (pass1.value !== pass2.value) {
-      state.passError = "Passwords do not match.";
-      render();
-      return;
-    }
-    const restaurant = getCurrentRestaurant();
-    if (!restaurant) return;
-    await updateDoc(doc(db, "restaurants", restaurant.id), {
-      passHash: await hashPass(pass1.value)
-    });
-    state.showPassSetup = false;
-    state.passError = "";
-    render();
-  });
-
-  form.append(pass1, pass2, error, submit, cancel);
-  card.append(title, sub, form);
-  page.append(card);
   return page;
 }
 
@@ -351,12 +312,12 @@ function renderApp() {
   const header = el("header", "header");
   const headerText = el("div");
   headerText.append(el("h1", "", restaurant.name));
-  headerText.append(el("p", "subtext", "Restaurant stock"));
+  headerText.append(el("p", "subtext", `Code to invite others: ${restaurant.id}`));
+  headerText.append(el("p", "subtext", "Restaurant stock management"));
 
   const switchBtn = el("button", "outline", "Switch Restaurant");
   switchBtn.addEventListener("click", () => {
     state.currentId = null;
-    state.passUnlocked = false;
     saveApp();
     render();
   });
@@ -364,30 +325,36 @@ function renderApp() {
   header.append(headerText, switchBtn);
   page.append(header);
 
-  const passBtn = el("button", "outline", "Change Password");
-  passBtn.addEventListener("click", () => {
-    state.showPassSetup = true;
-    render();
-  });
-  page.append(passBtn);
-
+  // Focus: Adding categories & costs
   const formCard = el("section", "card");
-  const formTitle = el("h2", "", state.editingId ? "Edit Item" : "Add Item");
+  const formTitle = el("h2", "", state.editingId ? "Edit Item" : "Add Inventory Item");
   const form = el("form", "stack");
+  
   const nameInput = el("input");
   nameInput.placeholder = "Item name";
   nameInput.required = true;
 
+  const categoryInput = el("input");
+  categoryInput.placeholder = "Category (e.g. Produce, Meat)";
+  categoryInput.setAttribute("list", "category-list");
+  
   const unitInput = el("input");
-  unitInput.placeholder = "Unit (pcs, oz, l, ml, etc.)";
+  unitInput.placeholder = "Unit (pcs, oz, l, ml, kg, etc.)";
   unitInput.setAttribute("list", "unit-list");
+
+  // Row for inputs
+  const costInput = el("input");
+  costInput.type = "number";
+  costInput.step = "0.01";
+  costInput.placeholder = "Cost per unit ($)";
+  costInput.min = "0";
 
   const stockInput = el("input");
   stockInput.type = "number";
-  stockInput.placeholder = "Current stock";
+  stockInput.placeholder = "Current stock amount";
   stockInput.min = "0";
 
-  const thresholdsTitle = el("p", "subtext", "Daily thresholds");
+  const thresholdsTitle = el("p", "subtext", "Minimum daily thresholds (when to order)");
   const thresholdsGrid = el("div", "threshold-grid");
   const thresholdInputs = {};
   DAYS.forEach((day) => {
@@ -404,15 +371,17 @@ function renderApp() {
 
   if (state.editingId && state.editingItem) {
     nameInput.value = state.editingItem.name || "";
-    stockInput.value = state.editingItem.currentStock ?? 0;
+    categoryInput.value = state.editingItem.category || "";
     unitInput.value = state.editingItem.unit || "";
+    costInput.value = state.editingItem.cost || "";
+    stockInput.value = state.editingItem.currentStock ?? 0;
     const thresholds = normalizeThresholds(state.editingItem);
     DAYS.forEach((day) => {
       thresholdInputs[day].value = thresholds[day] ?? 0;
     });
   }
 
-  const submit = el("button", "primary", state.editingId ? "Save Changes" : "Add Item");
+  const submit = el("button", "primary", state.editingId ? "Save Changes" : "Save Item");
   submit.type = "submit";
 
   form.addEventListener("submit", async (event) => {
@@ -427,6 +396,8 @@ function renderApp() {
 
     const payload = {
       name: nameInput.value.trim(),
+      category: categoryInput.value.trim() || "Uncategorized",
+      cost: Number(costInput.value || 0),
       currentStock: Number(stockInput.value || 0),
       thresholds,
       unit: unitInput.value.trim(),
@@ -446,28 +417,112 @@ function renderApp() {
     render();
   });
 
+  // Data lists for easier typing
+  const categoryList = el("datalist");
+  categoryList.id = "category-list";
+  ["Produce", "Meat", "Dairy", "Dry Goods", "Beverages", "Spices", "Packaging", "Cleaning"].forEach((u) => {
+    const option = document.createElement("option");
+    option.value = u;
+    categoryList.append(option);
+  });
+
   const unitList = el("datalist");
   unitList.id = "unit-list";
-  ["pcs", "oz", "l", "ml", "kg", "g", "lb", "pack", "box", "bottle"].forEach((u) => {
+  ["pcs", "oz", "l", "ml", "kg", "g", "lb", "pack", "box", "bottle", "case"].forEach((u) => {
     const option = document.createElement("option");
     option.value = u;
     unitList.append(option);
   });
 
-  form.append(nameInput, unitInput, stockInput, thresholdsTitle, thresholdsGrid, submit, unitList);
+  const row1 = document.createElement("div");
+  row1.className = "input-row";
+  row1.append(nameInput, categoryInput);
+
+  const row2 = document.createElement("div");
+  row2.className = "input-row";
+  row2.append(unitInput, costInput, stockInput);
+
+  form.append(row1, row2, thresholdsTitle, thresholdsGrid, submit, unitList, categoryList);
   formCard.append(formTitle, form);
   page.append(formCard);
 
+  // Items List Segment
   const listCard = el("section", "card");
   const listHeader = el("div", "section-header");
-  listHeader.append(el("h2", "", "Items"));
-  listCard.append(listHeader);
+  listHeader.append(el("h2", "", "Current Inventory"));
+  
+  // Calculate total inventory value
+  const totalValue = state.items.reduce((sum, item) => sum + ((item.currentStock || 0) * (item.cost || 0)), 0);
+  const valLabel = el("p", "subtext", `Estimated Value: $${totalValue.toFixed(2)}`);
+  valLabel.style.fontWeight = "600";
+  listHeader.append(valLabel);
 
-  if (state.items.length === 0) {
-    listCard.append(el("p", "subtext", "No items yet. Add your first one above."));
+  // Filters & Search
+  const filterRow = document.createElement("div");
+  filterRow.className = "filter-row";
+
+  const searchInput = el("input");
+  searchInput.className = "search-input";
+  searchInput.placeholder = "Search items by name or category...";
+  searchInput.value = state.searchQuery || "";
+  // To avoid losing focus on every keystroke rendering: Give focus back manually or render only on enter 
+  // Let's do a loose bind for input rendering
+  searchInput.addEventListener("input", (e) => {
+      // Small debounce
+      state.searchQuery = e.target.value.toLowerCase();
+      // Only do a DOM render after the user pauses typing to preserve focus
+  });
+  searchInput.addEventListener("blur", () => render()); 
+  searchInput.addEventListener("keydown", (e) => {
+      if(e.key === "Enter") render();
+  });
+
+  const lowStockBtn = el("button", state.showLowStockOnly ? "primary filter-btn" : "outline filter-btn", state.showLowStockOnly ? "🛑 Showing Low Stock List" : "Filter Shopping List");
+  lowStockBtn.addEventListener("click", () => {
+    state.showLowStockOnly = !state.showLowStockOnly;
+    render();
+  });
+
+  filterRow.append(searchInput, lowStockBtn);
+  listCard.append(listHeader, filterRow);
+
+  // Sorting and Display
+  let displayItems = [...state.items];
+  
+  // Sort by category safely
+  displayItems.sort((a,b) => {
+      const catA = (a.category || "Uncategorized").toLowerCase();
+      const catB = (b.category || "Uncategorized").toLowerCase();
+      if(catA !== catB) return catA.localeCompare(catB);
+      return (a.name||"").localeCompare(b.name||"");
+  });
+
+  if (state.searchQuery) {
+    displayItems = displayItems.filter(i => 
+      (i.name || "").toLowerCase().includes(state.searchQuery) ||
+      (i.category || "").toLowerCase().includes(state.searchQuery)
+    );
+  }
+
+  if (state.showLowStockOnly) {
+    displayItems = displayItems.filter(i => {
+      const thresholds = normalizeThresholds(i);
+      const today = todayKey();
+      const todayThreshold = Number(thresholds[today] || 0);
+      const status = getStatus(i.currentStock || 0, todayThreshold);
+      return status !== STATUS.GOOD;
+    });
+  }
+
+  if (displayItems.length === 0) {
+    if (state.items.length === 0) {
+      listCard.append(el("p", "subtext", "Welcome! Add your first inventory item above."));
+    } else {
+      listCard.append(el("p", "subtext", "No items matched your search or filters."));
+    }
   } else {
     const list = el("div", "item-list");
-    state.items.forEach((item) => {
+    displayItems.forEach((item) => {
       const thresholds = normalizeThresholds(item);
       const today = todayKey();
       const todayThreshold = Number(thresholds[today] || 0);
@@ -476,14 +531,25 @@ function renderApp() {
 
       const main = el("div", "item-main");
       const info = el("div");
-      info.append(el("h3", "", item.name || "Item"));
+      
+      const badge = el("span", "subtext", (item.category || "Uncategorized").toUpperCase());
+      badge.style.fontSize = "0.75rem"; badge.style.fontWeight = "700"; badge.style.color = "var(--accent)"; badge.style.letterSpacing = "0.05em";
+      
+      const title = el("h3", "", item.name || "Item");
+      title.style.margin = "4px 0";
+      
       const unitLabel = item.unit ? ` ${item.unit}` : "";
-      info.append(el("p", "subtext", `Stock: ${item.currentStock || 0}${unitLabel} | Today: ${todayThreshold}${unitLabel}`));
+      const valLabel = el("p", "subtext", `Stock: ${item.currentStock || 0}${unitLabel} | Daily Needs: ${todayThreshold}${unitLabel}`);
+      valLabel.style.margin = "0";
+
+      info.append(badge, title, valLabel);
 
       const edit = el("button", "outline", "Edit");
       edit.addEventListener("click", () => {
         state.editingId = item.id;
         state.editingItem = item;
+        // scroll up
+        window.scrollTo({top: 0, behavior: 'smooth'});
         render();
       });
 
@@ -511,8 +577,22 @@ function renderApp() {
         ? "Stock healthy"
         : status === STATUS.WARN
           ? "Near threshold"
-          : "Below threshold";
-      statusRow.append(label);
+          : "Out or Below limits";
+      
+      // Cost value indication right-aligned
+      if (item.cost) {
+         const valStr = document.createElement("span");
+         valStr.style.marginLeft = "auto";
+         valStr.style.fontWeight = "600";
+         valStr.style.fontSize = "0.9rem";
+         valStr.style.color = "var(--text-muted)";
+         valStr.textContent = `Value: $${((item.currentStock || 0) * item.cost).toFixed(2)}`;
+         statusRow.append(valStr);
+      } else {
+         label.style.flex = "1";
+      }
+
+      statusRow.insertBefore(label, statusRow.children[1]);
 
       card.append(main, actions, statusRow);
       list.append(card);
@@ -523,7 +603,7 @@ function renderApp() {
   page.append(listCard);
 
   const footer = el("footer", "footer");
-  footer.append(el("p", "subtext", "Tip: Add this app to your home screen for quick access."));
+  footer.append(el("p", "subtext", "Tip: Share the restaurant code with trusted managers to co-manage inventory."));
   page.append(footer);
 
   return page;
@@ -542,16 +622,12 @@ function makeAdjustButton(restaurantId, id, label, delta) {
 
 function render() {
   clear(root);
+  if (!state.userName) {
+    root.append(renderNameSetup());
+    return;
+  }
   if (!state.currentId) {
     root.append(renderHome());
-    return;
-  }
-  if (!state.passUnlocked) {
-    root.append(renderPassGate());
-    return;
-  }
-  if (state.showPassSetup) {
-    root.append(renderPassSetup());
     return;
   }
   root.append(renderApp());
