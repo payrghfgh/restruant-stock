@@ -64,6 +64,7 @@ h1, h2, h3, h4, h5, h6 {
 h1 {
   font-size: 2.75rem;
   background: linear-gradient(135deg, var(--text) 0%, #475569 100%);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 5px;
@@ -103,6 +104,7 @@ h3 { font-size: 1.3rem; font-weight: 700; margin-bottom: 2px; }
   padding: 24px 32px;
   background: var(--surface);
   backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border-radius: var(--radius-lg);
   border: 1px solid rgba(255, 255, 255, 0.4);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
@@ -112,6 +114,7 @@ h3 { font-size: 1.3rem; font-weight: 700; margin-bottom: 2px; }
 .card {
   background: var(--surface);
   backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border-radius: var(--radius-lg);
   padding: 36px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);
@@ -338,6 +341,40 @@ button:active {
   font-size: 0.85rem;
   margin-top: auto;
   opacity: 0.8;
+}
+
+/* Mobile Responsive Adjustments */
+.page { padding: 16px 12px; gap: 20px; }
+.header { padding: 16px 20px; flex-direction: column; text-align: center; align-items: stretch; }
+.header > * { margin-bottom: 8px; }
+.card { padding: 24px 16px; }
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; margin-bottom: 16px; }
+
+.actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 16px; }
+.action { padding: 16px 0; font-size: 1.25rem; } /* Large touch targets */
+
+.input-row { display: flex; flex-direction: column; gap: 12px; }
+.filter-row { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.threshold-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+/* Desktop Overrides */
+@media (min-width: 768px) {
+  .page { padding: 32px 20px; gap: 32px; }
+  .header { padding: 24px 32px; flex-direction: row; text-align: left; align-items: center; }
+  .header > * { margin-bottom: 0; }
+  .card { padding: 36px; }
+  h1 { font-size: 2.75rem; }
+  h2 { font-size: 1.8rem; margin-bottom: 24px; }
+  .actions { grid-template-columns: repeat(4, 1fr); }
+  .action { padding: 12px 0; font-size: 1.1rem; }
+  .input-row { flex-direction: row; }
+  .input-row > * { flex: 1; }
+  .filter-row { flex-direction: row; align-items: stretch; }
+  .search-input { flex: 2; }
+  .filter-btn { flex: 1; }
+  .threshold-grid { grid-template-columns: repeat(7, 1fr); gap: 16px; }
 }
 
 ::-webkit-scrollbar { width: 8px; }
