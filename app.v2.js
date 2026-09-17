@@ -105,6 +105,25 @@ function saveApp() {
   localStorage.setItem(APP_KEY, JSON.stringify(data));
 }
 
+function applyDarkMode(enabled) {
+  if (enabled) {
+    document.documentElement.classList.add("dark");
+  } else {
+    document.documentElement.classList.remove("dark");
+  }
+  localStorage.setItem(APP_KEY + "-darkmode", enabled ? "1" : "0");
+}
+
+function loadDarkMode() {
+  const saved = localStorage.getItem(APP_KEY + "-darkmode");
+  // Default to off; only enable if explicitly saved as "1"
+  applyDarkMode(saved === "1");
+}
+
+function isDarkMode() {
+  return document.documentElement.classList.contains("dark");
+}
+
 function isAdmin(user) {
   if (!user || !user.email) return false;
   const email = user.email.toLowerCase();
@@ -794,7 +813,28 @@ function renderApp() {
     exportToExcel(restaurant.name);
   });
 
-  filterRow.append(searchInput, lowStockBtn, exportExcelBtn);
+  // Hidden file input for XLSX import
+  const importFileInput = document.createElement("input");
+  importFileInput.type = "file";
+  importFileInput.accept = ".xlsx,.xls";
+  importFileInput.style.display = "none";
+  importFileInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    importXlsxBtn.disabled = true;
+    importXlsxBtn.textContent = "⏳ Importing...";
+    await importFromXlsx(restaurant.id, file);
+    importFileInput.value = "";
+    importXlsxBtn.disabled = false;
+    importXlsxBtn.textContent = "📥 Import XLSX";
+  });
+
+  const importXlsxBtn = el("button", "outline filter-btn", "📥 Import XLSX");
+  importXlsxBtn.addEventListener("click", () => {
+    importFileInput.click();
+  });
+
+  filterRow.append(searchInput, lowStockBtn, exportExcelBtn, importXlsxBtn, importFileInput);
   listCard.append(listHeader, filterRow);
 
   // Sorting and Display
@@ -1010,6 +1050,70 @@ function exportToExcel(restaurantName) {
   }
 }
 
+async function importFromXlsx(restaurantId, file) {
+  if (!window.XLSX) {
+    alert("XLSX library not loaded. Please refresh the page and try again.");
+    return;
+  }
+  const reader = new FileReader();
+  return new Promise((resolve, reject) => {
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+
+        if (!rows || rows.length === 0) {
+          alert("No data rows found in the spreadsheet.");
+          resolve(0);
+          return;
+        }
+
+        // Accept flexible column names (case-insensitive)
+        const normalize = (key) => key.toLowerCase().replace(/\s+/g, "").replace(/[^a-z]/g, "");
+        const itemsRef = collection(db, `restaurants/${restaurantId}/items`);
+        let imported = 0;
+
+        for (const row of rows) {
+          const normRow = {};
+          Object.keys(row).forEach(k => { normRow[normalize(k)] = row[k]; });
+
+          const name = String(normRow["itemname"] || normRow["name"] || "").trim();
+          if (!name) continue;
+
+          const thresholds = {};
+          DAYS.forEach(day => {
+            const val = normRow[day] || normRow[DAY_LABELS[day].toLowerCase()] || 0;
+            thresholds[day] = Number(val) || 0;
+          });
+
+          const payload = {
+            name,
+            category: String(normRow["category"] || "Uncategorized").trim(),
+            unit: String(normRow["unit"] || "").trim(),
+            cost: Number(normRow["cost"] || normRow["cost$"] || 0),
+            currentStock: Number(normRow["currentstock"] || normRow["stock"] || 0),
+            thresholds,
+            updatedAt: serverTimestamp()
+          };
+
+          await addDoc(itemsRef, payload);
+          imported++;
+        }
+
+        alert(`✅ Imported ${imported} item(s) successfully!`);
+        resolve(imported);
+      } catch (err) {
+        alert("Import error: " + err.message);
+        reject(err);
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 function renderUserSettings() {
   const page = el("div", "page");
 
@@ -1026,6 +1130,32 @@ function renderUserSettings() {
 
   header.append(headerText, backBtn);
   page.append(header);
+
+  // 0. Appearance / Dark Mode
+  const appearanceCard = el("section", "card");
+  appearanceCard.append(el("h2", "", "🎨 Appearance"));
+
+  const darkRow = el("div", "admin-row");
+  const darkLabel = el("div");
+  const darkLabelSpan = el("span", "", "Dark Mode");
+  darkLabelSpan.style.fontWeight = "600";
+  const darkSubtext = el("p", "subtext", "Switch the app to a dark colour scheme");
+  darkSubtext.style.marginTop = "2px";
+  darkLabel.append(darkLabelSpan, darkSubtext);
+
+  const darkToggle = el("input");
+  darkToggle.type = "checkbox";
+  darkToggle.style.width = "auto";
+  darkToggle.style.accentColor = "var(--accent)";
+  darkToggle.style.transform = "scale(1.4)";
+  darkToggle.checked = isDarkMode();
+  darkToggle.addEventListener("change", (e) => {
+    applyDarkMode(e.target.checked);
+  });
+
+  darkRow.append(darkLabel, darkToggle);
+  appearanceCard.append(darkRow);
+  page.append(appearanceCard);
 
   // 1. Update Display Name
   const nameCard = el("section", "card");
@@ -1229,6 +1359,7 @@ function render() {
   const saved = loadApp();
   state.currentId = saved.lastRestaurantId;
   
+  loadDarkMode();
   subscribeAdminConfig();
 
   onAuthStateChanged(auth, async (user) => {

@@ -31,73 +31,70 @@
   --radius-sm: 12px;
   --radius-md: 16px;
   --radius-lg: 24px;
-  color-scheme: light dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --primary: #f8fafc;
-    --primary-hover: #e2e8f0;
-    --bg: #090d16;
-    --surface: rgba(15, 23, 42, 0.85);
-    --card-bg: #1e293b;
-    --text: #f8fafc;
-    --muted: #94a3b8;
-    --border: rgba(255, 255, 255, 0.12);
-    --input-bg: rgba(30, 41, 59, 0.8);
-    --action-bg: #334155;
-    --action-hover: #475569;
-    
-    --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 12px 24px -10px rgba(0, 0, 0, 0.5);
-    --shadow-lg: 0 25px 40px -10px rgba(0, 0, 0, 0.7);
-  }
+html.dark :root {
+  --primary: #f8fafc;
+  --primary-hover: #e2e8f0;
+  --bg: #090d16;
+  --surface: rgba(15, 23, 42, 0.85);
+  --card-bg: #1e293b;
+  --text: #f8fafc;
+  --muted: #94a3b8;
+  --border: rgba(255, 255, 255, 0.12);
+  --input-bg: rgba(30, 41, 59, 0.8);
+  --action-bg: #334155;
+  --action-hover: #475569;
+  
+  --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 12px 24px -10px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 25px 40px -10px rgba(0, 0, 0, 0.7);
+}
 
-  body {
-    background-image: 
-      radial-gradient(at 0% 0%, hsla(28, 100%, 50%, 0.15) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, hsla(189, 100%, 30%, 0.15) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, hsla(255, 80%, 20%, 0.2) 0px, transparent 50%);
-    color: var(--text);
-  }
+html.dark body {
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(28, 100%, 50%, 0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(189, 100%, 30%, 0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(255, 80%, 20%, 0.2) 0px, transparent 50%);
+  color: var(--text);
+}
 
-  h1, h2, h3, h4, h5, h6 {
-    color: var(--text);
-  }
+html.dark h1, html.dark h2, html.dark h3, html.dark h4, html.dark h5, html.dark h6 {
+  color: var(--text);
+}
 
-  .primary {
-    background: #f8fafc;
-    color: #0f172a;
-  }
+html.dark .primary {
+  background: #f8fafc;
+  color: #0f172a;
+}
 
-  .primary:hover {
-    background: #e2e8f0;
-  }
+html.dark .primary:hover {
+  background: #e2e8f0;
+}
 
-  .card {
-    background: var(--surface);
-    border-color: var(--border);
-  }
+html.dark .card {
+  background: var(--surface);
+  border-color: var(--border);
+}
 
-  .item, .admin-user-item, .qty-input {
-    background: #1e293b;
-    color: var(--text);
-    border-color: var(--border);
-  }
+html.dark .item, html.dark .admin-user-item, html.dark .qty-input {
+  background: #1e293b;
+  color: var(--text);
+  border-color: var(--border);
+}
 
-  .admin-row {
-    background: rgba(30, 41, 59, 0.7);
-    color: var(--text);
-  }
+html.dark .admin-row {
+  background: rgba(30, 41, 59, 0.7);
+  color: var(--text);
+}
 
-  .member-row {
-    background: #0f172a;
-    color: var(--text);
-  }
+html.dark .member-row {
+  background: #0f172a;
+  color: var(--text);
+}
 
-  .status-row span {
-    color: var(--text);
-  }
+html.dark .status-row span {
+  color: var(--text);
 }
 
 * {
