@@ -6,7 +6,7 @@ This is a zero-build, static Firebase app. It runs directly from `public/` with 
 From the project root:
 
 ```
-cd C:\Users\Rushan\Documents\RPAPP
+cd C:\Users\Name\Location\xyz
 python -m http.server 5173 --directory public
 ```
 
